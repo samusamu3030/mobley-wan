@@ -69,6 +69,7 @@
   .sh-tabs button { font: inherit; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; white-space: nowrap; }
   .sh-tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
   .sh-page { display: grid; gap: 28px; }
+  [hidden], .sh-page[hidden] { display: none !important; }
   .sh-quote { margin: 0; padding: 14px 18px; border-left: 3px solid var(--line); background: var(--panel); border-radius: 8px; }
   .sh-quote blockquote { margin: 0; font-family: var(--serif); font-size: 1.15rem; line-height: 1.35; }
   .sh-quote figcaption { margin-top: 6px; color: var(--muted); font-size: 0.8rem; }
@@ -263,7 +264,11 @@
     for (const s of document.querySelectorAll('.sh-page')) s.hidden = s.id !== id;
     for (const b of document.querySelectorAll('.sh-tabs button')) { const on = b.dataset.page === id; b.setAttribute('aria-selected', String(on)); if (on) b.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
   };
-  for (const b of document.querySelectorAll('.sh-tabs button')) b.addEventListener('click', () => { history.replaceState(null, '', '#' + b.dataset.page); show(b.dataset.page); });
+  const nav = document.querySelector('.sh-tabs');
+  for (const b of document.querySelectorAll('.sh-tabs button')) b.addEventListener('click', () => {
+    history.replaceState(null, '', '#' + b.dataset.page); show(b.dataset.page);
+    if (nav && nav.getBoundingClientRect().top <= 1) window.scrollTo({ top: nav.offsetTop - 8 });
+  });
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
   show(location.hash.slice(1));
 })();
