@@ -80,6 +80,13 @@
   .sh-quote blockquote { margin: 0; font-family: var(--serif); font-size: 1.15rem; line-height: 1.35; }
   .sh-quote figcaption { margin-top: 6px; color: var(--muted); font-size: 0.8rem; }
   .sh-grid2 { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
+  .sh-bars { display: grid; gap: 6px; margin: 0 0 14px; max-width: 34rem; }
+  .sh-bar { display: grid; grid-template-columns: 3.2rem 1fr 3.4rem; align-items: center; gap: 8px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  .sh-bar-track { height: 12px; border-radius: 6px; background: var(--panel); overflow: hidden; }
+  .sh-bar-fill { height: 100%; border-radius: 6px; background: var(--muted); }
+  .sh-bar-fill.good { background: var(--ok); }
+  .sh-bar-fill.bad { background: var(--bad); }
+  .sh-bar-rank { color: var(--muted); text-align: right; }
   .sh-foot { font-size: 0.8rem; color: var(--muted); }
   .sh-foot summary { cursor: pointer; }
   .sh-foot ul { margin: 6px 0 0; padding-left: 1.2rem; display: grid; gap: 4px; }
@@ -166,6 +173,9 @@
       <div class="sh-box"><table class="sh-table"><thead><tr><th>Team</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>3PM</th><th>TO</th><th>FG%</th><th>FT%</th></tr></thead><tbody id="ranks"></tbody></table></div></div>
     <div class="sh-card"><h2>Category totals</h2><p class="sh-note">The numbers behind the ranks. Lower is better for TO. Colors match the ranks.</p>
       <div class="sh-box"><table class="sh-table"><thead><tr><th>Team</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>3PM</th><th>TO</th><th>FG%</th><th>FT%</th></tr></thead><tbody id="teamstats"></tbody></table></div></div>
+    <div class="sh-card"><h2>Per 36 minutes</h2><p class="sh-note">Each team's current roster, season stats per 36 minutes played. This removes the effect of games played and streaming, so it shows how strong each roster is per minute. The bars show where the selected team ranks (longer is better).</p>
+      <div class="sh-bars" id="pm-bars"></div>
+      <div class="sh-box"><table class="sh-table"><thead><tr><th>Team</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>3PM</th><th>TO</th><th>FG%</th><th>FT%</th></tr></thead><tbody id="perminute"></tbody></table></div></div>
     <div class="sh-card"><h2>Recent moves around the league</h2><p class="sh-note">Adds and drops, newest first (day/month, Malaysia time).</p>
       <div class="sh-box"><table class="sh-table"><thead><tr><th>When</th><th class="sh-l">Team</th><th class="sh-l">Added</th><th class="sh-l">Dropped</th><th class="sh-l">Type</th></tr></thead><tbody id="txns"></tbody></table></div></div>
   </section>
@@ -283,6 +293,16 @@
     fill('standings', sortRows(L.standings).map((r) => { const tr = el('tr'); if (r.team === name) tr.className = 'sh-mine'; tr.append(td(r.order), td(r.team, 'sh-l'), td(r.record), td(r.cats), td(r.cat_pct + '%'), td(r.adds), td(r.trades)); return tr; }));
     fill('ranks', sortRows(L.ranks).map((r) => { const tr = el('tr'); if (r.team === name) tr.className = 'sh-mine'; tr.append(td(r.team)); for (const c of CATS) { const k = Number(r[c]); const x = td(k, 'sh-c'); rankTint(x, k); tr.append(x); } return tr; }));
     fill('teamstats', sortRows(L.teamstats).map((r) => { const tr = el('tr'); if (r.team === name) tr.className = 'sh-mine'; tr.append(td(r.team)); for (const c of CATS) { const v = Number(r[c]); const x = td(c.endsWith('%') ? f3(v) : v.toLocaleString('en'), 'sh-c'); const k = rankMap[r.team] ? Number(rankMap[r.team][c]) : 0; rankTint(x, k); if (k) x.title = 'Rank ' + k; tr.append(x); } return tr; }));
+    const pm = sortRows(L.perminute);
+    fill('perminute', pm.map((r) => { const tr = el('tr'); if (r.team === name) tr.className = 'sh-mine'; tr.append(td(r.team)); for (const c of CATS) { const v = Number(r[c]); const x = td(c.endsWith('%') ? f3(v) : v.toFixed(1), 'sh-c'); const k = Number(r['r_' + c]); rankTint(x, k); if (k) x.title = 'Rank ' + k; tr.append(x); } return tr; }));
+    const me = pm.find((r) => r.team === name);
+    const ord = (k) => k + (k % 10 === 1 && k !== 11 ? 'st' : k % 10 === 2 && k !== 12 ? 'nd' : k % 10 === 3 && k !== 13 ? 'rd' : 'th');
+    fill('pm-bars', me ? CATS.map((c) => {
+      const k = Number(me['r_' + c]); const n = pm.length || 12;
+      const row = el('div', undefined, 'sh-bar'); const track = el('div', undefined, 'sh-bar-track'); const fillEl = el('div', undefined, 'sh-bar-fill' + (k <= 3 ? ' good' : k >= n - 2 ? ' bad' : ''));
+      fillEl.style.width = Math.round(100 * (n - k + 1) / n) + '%'; track.append(fillEl);
+      row.append(el('span', c), track, el('span', ord(k), 'sh-bar-rank')); return row;
+    }) : []);
     fill('txns', sortRows(L.txns).map((r) => { const tr = el('tr'); if (r.team === name) tr.className = 'sh-mine'; tr.append(td(r.when), td(r.team, 'sh-l'), td(r.added, 'sh-l'), td(r.dropped, 'sh-l sh-muted'), td(r.type, 'sh-l sh-muted')); return tr; }));
   };
 
