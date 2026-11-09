@@ -53,6 +53,22 @@ window.GEN = async function (opts = {}) {
   const pn = (i) => pname[i.playerId] || String(i.playerId);
   const txns = txs.sort((a, b) => b.proposedDate - a.proposedDate).slice(0, 25).map((x, i) => ({ order: i + 1, when: new Date(x.proposedDate + 8 * 3600e3).toISOString().slice(5, 16).replace('T', ' ').replace(/^(\d\d)-(\d\d)/, '$2/$1'), team: names[x.teamId], type: x.type === 'WAIVER' ? 'Waiver claim' : x.type === 'FREEAGENT' ? 'Free agent' : x.type === 'ROSTER' ? 'Drop' : 'Trade', added: x.items.filter((i) => i.type === 'ADD' || (i.type === 'TRADE' && i.toTeamId === x.teamId)).map(pn).join(', '), dropped: x.items.filter((i) => i.type === 'DROP' || (i.type === 'TRADE' && i.fromTeamId === x.teamId)).map(pn).join(', ') }));
 
+  // ---- per-36-minute team rates from each team's current roster (season totals / minutes)
+  const perminute = d.teams.map((t) => {
+    const s = { min: 0 }; for (const k of [0, 6, 3, 2, 1, 17, 11, 13, 14, 15, 16]) s[k] = 0;
+    for (const e of t.roster.entries) {
+      const st = (e.playerPoolEntry.player.stats || []).find((x) => x.id === '00' + SEASON);
+      const gp = st?.stats?.[42] || 0; const a = st?.averageStats; if (!gp || !a) continue;
+      s.min += (a[40] || 0) * gp; for (const k of [0, 6, 3, 2, 1, 17, 11, 13, 14, 15, 16]) s[k] += (a[k] || 0) * gp;
+    }
+    const r = (k) => s.min ? +(36 * s[k] / s.min).toFixed(2) : 0;
+    return { team: names[t.id], minutes: Math.round(s.min), PTS: r(0), REB: r(6), AST: r(3), STL: r(2), BLK: r(1), '3PM': r(17), TO: r(11), 'FG%': s[14] ? +(s[13] / s[14]).toFixed(3) : 0, 'FT%': s[16] ? +(s[15] / s[16]).toFixed(3) : 0 };
+  });
+  const pmRank = {}; for (const r of perminute) pmRank[r.team] = [];
+  CAT.forEach((c, i) => { [...perminute].sort((a, b) => c === 'TO' ? a[c] - b[c] : b[c] - a[c]).forEach((r, j) => { pmRank[r.team][i] = j + 1; }); });
+  perminute.forEach((r) => { CAT.forEach((c, i) => { r['r_' + c] = pmRank[r.team][i]; }); r.order = 0; });
+  perminute.sort((a, b) => pmRank[a.team].reduce((x, y) => x + y, 0) - pmRank[b.team].reduce((x, y) => x + y, 0)).forEach((r, i) => { r.order = i + 1; });
+
   // ---- player math
   const W = { PTS: (a) => (a[0] - 12) / 6, REB: (a) => (a[6] - 4.5) / 2.8, AST: (a) => (a[3] - 2.7) / 2, STL: (a) => (a[2] - 0.9) / 0.45, BLK: (a) => ((a[1] || 0) - 0.5) / 0.55, '3PM': (a) => ((a[17] || 0) - 1.5), TO: (a) => -((a[11] || 0) - 1.5) / 1.2, 'FG%': (a) => ((a[13] || 0) - 0.47 * (a[14] || 0)) / 1.3, 'FT%': (a) => ((a[15] || 0) - 0.78 * (a[16] || 0)) / 0.9 };
   const val = (a, punts) => CAT.filter((c) => !punts.includes(c)).reduce((s, c) => s + W[c](a), 0);
@@ -164,7 +180,7 @@ window.GEN = async function (opts = {}) {
       today, moves, injuries, matchnotes, matchup, daygrid, lineup, opponent, strategy, outlook, nextweek, roster, waivers: wv, profiles, news };
   };
 
-  const files = { 'league/ranks': ranks, 'league/teamstats': teamstats, 'league/standings': standings, 'league/txns': txns };
+  const files = { 'league/ranks': ranks, 'league/teamstats': teamstats, 'league/standings': standings, 'league/txns': txns, 'league/perminute': perminute };
   if (opts.quote) files['league/quote'] = [opts.quote];
   for (const t of d.teams) files['teams/' + slug(names[t.id])] = team(t.id);
   window.SITEFILES = files;
